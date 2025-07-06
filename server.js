@@ -6,16 +6,19 @@ const { body, validationResult } = require('express-validator');
 
 dotenv.config();
 
-const allowedOrigins = process.env.ALLOWED_ORIGINS.split(',');
+const allowedOrigins = process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim());
 
 const app = express();
+
+// CORS middleware
 app.use(cors({
   origin: function(origin, callback) {
+    // allow requests with no origin (like curl, Postman)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) === -1) {
-      return callback(new Error('Not allowed by CORS'), false);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
     }
-    return callback(null, true);
+    return callback(new Error('Not allowed by CORS'), false);
   },
   credentials: true,
 }));
@@ -26,6 +29,10 @@ app.use(express.json());
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
+}).then(() => {
+  console.log('Connected to MongoDB');
+}).catch(err => {
+  console.error('MongoDB connection error:', err);
 });
 
 const productSchema = new mongoose.Schema({
@@ -50,22 +57,18 @@ const Product = mongoose.model('Product', productSchema);
 const User = mongoose.model('User', userSchema);
 const Cart = mongoose.model('Cart', cartSchema);
 
-// Dummy users and products for seeding
-const users = [
-  { username: 'admin', password: 'admin123', role: 'admin' },
-  { username: 'user', password: 'user123', role: 'user' },
-];
-
-const dummyProducts = [
-  { name: 'Product A', price: 10, stock: 100 },
-  { name: 'Product B', price: 20, stock: 50 },
-];
-
-// Seed DB on connection open
+// Seed DB once connected
 mongoose.connection.once('open', async () => {
-  console.log('Connected to MongoDB');
+  const users = [
+    { username: 'admin', password: 'admin123', role: 'admin' },
+    { username: 'user', password: 'user123', role: 'user' },
+  ];
 
-  // Seed users
+  const dummyProducts = [
+    { name: 'Product A', price: 10, stock: 100 },
+    { name: 'Product B', price: 20, stock: 50 },
+  ];
+
   for (const user of users) {
     const existingUser = await User.findOne({ username: user.username });
     if (!existingUser) {
@@ -74,7 +77,6 @@ mongoose.connection.once('open', async () => {
     }
   }
 
-  // Seed products
   for (const product of dummyProducts) {
     const existingProduct = await Product.findOne({ name: product.name });
     if (!existingProduct) {
@@ -86,7 +88,7 @@ mongoose.connection.once('open', async () => {
 
 // Routes
 
-// Login (now checking users in DB instead of array)
+// Login
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
   const foundUser = await User.findOne({ username, password });
@@ -174,7 +176,7 @@ app.post('/cart/purchase', async (req, res) => {
       product.stock -= item.quantity;
       await product.save();
     } else {
-      return res.status(400).json({ error: `Insufficient stock for ${product.name}` });
+      return res.status(400).json({ error: `Insufficient stock for ${product ? product.name : 'unknown product'}` });
     }
   }
 

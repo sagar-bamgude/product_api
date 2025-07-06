@@ -6,11 +6,18 @@ const { body, validationResult } = require('express-validator');
 
 dotenv.config();
 
+const allowedOrigins = process.env.ALLOWED_ORIGINS.split(',');
+
 const app = express();
 app.use(cors({
-  origin: 'http://localhost:3000',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return callback(new Error('Not allowed by CORS'), false);
+    }
+    return callback(null, true);
+  },
+  credentials: true,
 }));
 
 app.use(express.json());

@@ -8,21 +8,19 @@ dotenv.config();
 
 const app = express();
 app.use(cors({
-    origin: 'http://localhost:3000',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    credentials: true
-  }));
-  
-  app.use(express.json());
+  origin: 'http://localhost:3000',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
 
+app.use(express.json());
 
 // Connect to MongoDB
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/shop', {
+mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 });
 
-// Schemas
 const productSchema = new mongoose.Schema({
   name: String,
   price: Number,
@@ -34,7 +32,6 @@ const userSchema = new mongoose.Schema({
   password: String,
   role: String, // 'admin' or 'user'
 });
- 
 
 const cartSchema = new mongoose.Schema({
   userId: String,
@@ -46,18 +43,46 @@ const Product = mongoose.model('Product', productSchema);
 const User = mongoose.model('User', userSchema);
 const Cart = mongoose.model('Cart', cartSchema);
 
-// Dummy users
+// Dummy users and products for seeding
 const users = [
   { username: 'admin', password: 'admin123', role: 'admin' },
   { username: 'user', password: 'user123', role: 'user' },
 ];
 
+const dummyProducts = [
+  { name: 'Product A', price: 10, stock: 100 },
+  { name: 'Product B', price: 20, stock: 50 },
+];
+
+// Seed DB on connection open
+mongoose.connection.once('open', async () => {
+  console.log('Connected to MongoDB');
+
+  // Seed users
+  for (const user of users) {
+    const existingUser = await User.findOne({ username: user.username });
+    if (!existingUser) {
+      await new User(user).save();
+      console.log(`User '${user.username}' added to DB.`);
+    }
+  }
+
+  // Seed products
+  for (const product of dummyProducts) {
+    const existingProduct = await Product.findOne({ name: product.name });
+    if (!existingProduct) {
+      await new Product(product).save();
+      console.log(`Product '${product.name}' added to DB.`);
+    }
+  }
+});
+
 // Routes
 
-// Login
-app.post('/login', (req, res) => {
+// Login (now checking users in DB instead of array)
+app.post('/login', async (req, res) => {
   const { username, password } = req.body;
-  const foundUser = users.find(u => u.username === username && u.password === password);
+  const foundUser = await User.findOne({ username, password });
   if (foundUser) {
     return res.json({ role: foundUser.role });
   } else {
